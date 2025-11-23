@@ -3,6 +3,10 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$SCRIPT_DIR" || exit
 
+# Enable ONLY tool-calling features
+export ENABLE_AUTO_TOOL_CHOICE=true
+export ENABLE_TOOL_CALL_PARSER=true
+
 # Add conditional Playwright browser installation
 if [[ "${WEB_LOADER_ENGINE,,}" == "playwright" ]]; then
     if [[ -z "${PLAYWRIGHT_WS_URL}" ]]; then
@@ -40,17 +44,38 @@ if [[ "${USE_OLLAMA_DOCKER,,}" == "true" ]]; then
 fi
 
 if [[ "${USE_CUDA_DOCKER,,}" == "true" ]]; then
-  echo "CUDA is enabled, appending LD_LIBRARY_PATH"
+  echo "CUDA is enabled, appending LD_LIBRARY_PATH to include torch/cudnn & cublas libraries."
   export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.11/site-packages/torch/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib"
 fi
 
-###############################################################################
-# 🚀 DOĞRU ÇIKIŞ: OPENWEBUI = Python modülü olarak başlatılır
-###############################################################################
+# Check if SPACE_ID is set, if so, configure for space
+if [ -n "$SPACE_ID" ]; then
+  echo "Configuring for HuggingFace Space deployment"
+  if [ -n "$ADMIN_USER_EMAIL" ] && [ -n "$ADMIN_USER_PASSWORD" ]; then
+    echo "Admin user configured, creating"
+    WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" uvicorn open_webui.main:app --host "$HOST" --port "$PORT" --forwarded-allow-ips '*' &
+    webui_pid=$!
+    echo "Waiting for webui to start..."
+    while ! curl -s "http://localhost:${PORT}/health" > /dev/null; do
+      sleep 1
+    done
+    echo "Creating admin user..."
+    curl \
+      -X POST "http://localhost:${PORT}/api/v1/auths/signup" \
+      -H "accept: application/json" \
+      -H "Content-Type: application/json" \
+      -d "{ \"email\": \"${ADMIN_USER_EMAIL}\", \"password\": \"${ADMIN_USER_PASSWORD}\", \"name\": \"Admin\" }"
+    echo "Shutting down webui..."
+    kill $webui_pid
+  fi
 
-echo "Starting OpenWebUI backend (tools, search, browser auto-enabled)..."
+  export WEBUI_URL=${SPACE_HOST}
+fi
 
-WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec python3 -m open_webui.main \
+PYTHON_CMD=$(command -v python3 || command -v python)
+
+WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app \
   --host "$HOST" \
   --port "$PORT" \
-  --forwarded-allow-ips '*'
+  --forwarded-allow-ips '*' \
+  --workers "${UVICORN_WORKERS:-1}"
