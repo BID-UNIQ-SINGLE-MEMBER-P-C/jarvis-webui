@@ -3,17 +3,6 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$SCRIPT_DIR" || exit
 
-# 🟩 TOOL SYSTEM ENABLE — EKLENDİ
-export ENABLE_AUTO_TOOL_CHOICE=true
-export ENABLE_TOOL_CALL_PARSER=true
-export ENABLE_WEB_SEARCH=true
-export ENABLE_BROWSER=true
-
-# 🟩 ZORUNLU ENV FALLBACK — EKLENDİ (backend hata vermesin diye)
-export OPENAI_API_KEY="${OPENAI_API_KEY:-none}"
-export WEBUI_JWT_SECRET_KEY="${WEBUI_JWT_SECRET_KEY:-jwtsecret123}"
-export DATA_DIR="${DATA_DIR:-/app/backend/data}"
-
 # Add conditional Playwright browser installation
 if [[ "${WEB_LOADER_ENGINE,,}" == "playwright" ]]; then
     if [[ -z "${PLAYWRIGHT_WS_URL}" ]]; then
